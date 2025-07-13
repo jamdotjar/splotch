@@ -1,6 +1,9 @@
 from machine import Pin, PWM
 import time
 
+# TODO: push button lifts
+# TODO: second servo
+
 # Setup encoder pins
 pin_a = Pin(26, Pin.IN, Pin.PULL_UP)
 pin_b = Pin(27, Pin.IN, Pin.PULL_UP)
