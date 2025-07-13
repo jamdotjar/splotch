@@ -116,61 +116,6 @@ class Plotter:
         else:  # normal
             self.servo_delay = 0.05
             self.servo_steps_per_degree = 1.5
-
-    def calcFK(self, t1, t2):
-        """
-        Calculate forward kinematics - find position from servo angles
-        Based on the provided FK equations
-        """
-        try:
-            # Convert angles to radians
-            t1_rad = math.radians(t1)
-            t2_rad = math.radians(t2)
-            
-            # Use the same parameters as IK
-            l1 = self.l1  # first link length
-            l2 = self.l2  # second link length
-            dj = self.d   # distance between joints
-            
-            # Calculate intermediate values
-            a = l1 * math.cos(t1_rad)
-            b = l1 * math.sin(t1_rad)
-            c = dj + (l1 * math.cos(t2_rad))
-            d = l1 * math.sin(t2_rad)
-            
-            k1 = c - a
-            k2 = d - b
-            k3 = c + a
-            k4 = d + b
-            
-            j1 = c**2 + d**2
-            j2 = a**2 + b**2
-            
-            db = math.sqrt(k1**2 + k2**2)
-            
-            # Check if configuration is valid
-            if db > 2 * l2:
-                return None, None
-            
-            phi = math.acos(db / (2 * l2))
-            phi1 = math.acos((db**2 + l1**2 - j1) / (2 * db * l1))
-            
-            s = l1**2 - 2 * l1 * l2 * math.cos(phi + phi1) + ((j1 + j2) / 2)
-            
-            # Calculate final position
-            denominator = 2 * (k1 * k4 - k2 * k3)
-            if abs(denominator) < 1e-10:  # Avoid division by zero
-                return None, None
-                
-            y = (2 * k1 * s - (k3 * (j1 - j2))) / denominator
-            x = (j1 - j2 - 2 * k2 * y) / (2 * k1) if abs(k1) > 1e-10 else 0
-            
-            return x, y
-            
-        except (ValueError, ZeroDivisionError) as e:
-            print(f"Error in FK calculation: {e}")
-            return None, None
-
     def calcIK(self, x1, y1):
         """
         Calculate inverse kinematics for dual arm SCARA system
@@ -242,70 +187,6 @@ class Plotter:
         else:
             print(f"Cannot reach position ({x1}, {y1})")
 
-    def drawLineOld(self, x1, y1):
-        """
-        Original drawLine method (kept for reference)
-        """
-        # Clamp coordinates
-        x1 = max(min(x1, self.Xmax), self.Xmin)
-        y1 = max(min(y1, self.Ymax), self.Ymin)
-
-        C2 = self.C2
-        totalDist = self.totalDist
-        v = self.v
-
-        if x1 < -C2:
-            tx1 = math.atan((abs(x1) - C2) / (totalDist - y1))
-            dx1 = math.sqrt((abs(x1) - C2) ** 2 + (totalDist - y1) ** 2)
-            cx1 = math.acos(dx1 / 180)
-            anglex1 = 135 - v * (tx1 + cx1)
-
-            ty1 = math.atan((abs(x1) + C2) / (totalDist - y1))
-            dy1 = math.sqrt((abs(x1) + C2) ** 2 + (totalDist - y1) ** 2)
-            cy1 = math.acos(dy1 / 180)
-            angley1 = 45 + v * (cy1 - ty1)
-
-            self.servowrite(anglex1, angley1)
-
-        elif -C2 <= x1 < 0:
-            tx1 = math.atan((C2 - abs(x1)) / (totalDist - y1))
-            dx1 = math.sqrt((C2 - abs(x1)) ** 2 + (totalDist - y1) ** 2)
-            cx1 = math.acos(dx1 / 180)
-            anglex1 = 135 - v * (cx1 - tx1)
-
-            ty1 = math.atan((abs(x1) + C2) / (totalDist - y1))
-            dy1 = math.sqrt((abs(x1) + C2) ** 2 + (totalDist - y1) ** 2)
-            cy1 = math.acos(dy1 / 180)
-            angley1 = 45 + v * (cy1 - ty1)
-
-            self.servowrite(anglex1, angley1)
-
-        elif 0 <= x1 < C2:
-            tx1 = math.atan((x1 + C2) / (totalDist - y1))
-            dx1 = math.sqrt((C2 + x1) ** 2 + (totalDist - y1) ** 2)
-            cx1 = math.acos(dx1 / 180)
-            anglex1 = 135 - v * (cx1 - tx1)
-
-            ty1 = math.atan((C2 - x1) / (totalDist - y1))
-            dy1 = math.sqrt((C2 - x1) ** 2 + (totalDist - y1) ** 2)
-            cy1 = math.acos(dy1 / 180)
-            angley1 = 45 + v * (cy1 - ty1)
-
-            self.servowrite(anglex1, angley1)
-
-        elif x1 >= C2:
-            tx1 = math.atan((x1 + C2) / (totalDist - y1))
-            dx1 = math.sqrt((x1 + C2) ** 2 + (totalDist - y1) ** 2)
-            cx1 = math.acos(dx1 / 180)
-            anglex1 = 135 - v * (cx1 - tx1)
-
-            ty1 = math.atan((x1 - C2) / (totalDist - y1))
-            dy1 = math.sqrt((x1 - C2) ** 2 + (totalDist - y1) ** 2)
-            cy1 = math.acos(dy1 / 180)
-            angley1 = 45 + v * (cy1 + ty1)
-
-            self.servowrite(anglex1, angley1)
-
     def testIK(self):
         """
         Test the IK implementation with known values
@@ -337,51 +218,47 @@ def main():
     
     # Set both servos to 90 degrees
     plotter.servowrite(90, 90, smooth=False)
-    time.sleep(5)
+    time.sleep(1)
     
-    # print("Press the button on IO25 to start the program...")
-    # # Wait for button press to start
-    # while stop_button.value():
-    #     time.sleep(0.1)
-    # print("Starting program...")
-    # time.sleep(0.5)  # Debounce delay
-    
-    # # Test the IK implementation first
-    # plotter.testIK()
+    print("Ready to receive servo angle pairs")
+    print("Format: 'angle_a,angle_b' (e.g. '120,60')")
+    print("Type 'exit' to quit")
 
     try:
-        # Set movement speed to normal for better control
-        plotter.setMovementSpeed('normal')
-        
         while True:
-            # Move to starting position first (pen up)
-            print("Moving to start position...")
-            plotter.servowrite(80, 100, smooth=True)
-            time.sleep(0.8)  # Let servos settle
+            # Wait for input from computer
+            input_data = input("Enter angles (a,b): ")
             
-            # Put pen down and draw
-            plotter.penDown()
-            print("Drawing vertical line...")
-            plotter.servowrite(60, 120, smooth=True)  # Draw the line 
-            time.sleep(0.8)  # Let the line finish drawing
-            
-            # Lift pen
-            plotter.penUp()
-            time.sleep(0.3)
-            
-            # Return to center position
-            print("Returning to center...")
-            plotter.servowrite(90, 90, smooth=True)
-            
-            print("Cycle complete, waiting...")
-            time.sleep(2.0)  # Wait before next cycle
+            # Check for exit command
+            if input_data.lower() == 'exit':
+                print("Exiting program...")
+                break
+                
+            # Parse input
+            try:
+                parts = input_data.strip().split(',')
+                if len(parts) == 2:
+                    angle_a = float(parts[0])
+                    angle_b = float(parts[1])
+                    
+                    # Clamp angles to safe limits
+                    angle_a = max(min(angle_a, plotter.servo_max), plotter.servo_min)
+                    angle_b = max(min(angle_b, plotter.servo_max), plotter.servo_min)
+                    
+                    print(f"Moving to angles: a={angle_a}, b={angle_b}")
+                    plotter.servowrite(angle_a, angle_b, smooth=True)
+                else:
+                    print("Error: Invalid format. Use 'angle_a,angle_b'")
+            except ValueError:
+                print("Error: Invalid angles. Please enter numbers only.")
+                
     except KeyboardInterrupt:
         print("Program interrupted by user")
     except Exception as e:
         print(f"Error occurred: {e}")
     finally:
         # Make sure pen is up when exiting
-        plotter.servowrite(90, 90, smooth=False)  # Quick reset to neutral position
+        plotter.servowrite(90, 90, smooth=False)  # Reset to neutral position
         plotter.penUp()
         print("Program ended")
 
