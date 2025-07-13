@@ -125,11 +125,41 @@ class IKVisualizer:
             return None, None
     
     def draw_arm_config(self, target_x, target_y, clear_plot=True):
+        # --- Display angle visualization (relative to the back as front) ---
+        # Mirror the target if y > 0 (behind), for display only
+        display_y = -target_y if target_y > 0 else target_y
+        display_alpha, display_beta = self.calcIK(target_x, display_y)
+        if display_alpha is not None and display_beta is not None:
+            display_alpha_rad = math.radians(display_alpha)
+            display_beta_rad = math.radians(display_beta)
+            # Draw dashed lines for display angles
+            left_disp_line = self.left_origin + self.l1 * 0.5 * np.array([math.cos(display_alpha_rad), math.sin(display_alpha_rad)])
+            right_disp_line = self.right_origin + self.l1 * 0.5 * np.array([math.cos(display_beta_rad), math.sin(display_beta_rad)])
+            self.ax.plot([self.left_origin[0], left_disp_line[0]], [self.left_origin[1], left_disp_line[1]], 'b--', linewidth=1.5, alpha=0.5)
+            self.ax.plot([self.right_origin[0], right_disp_line[0]], [self.right_origin[1], right_disp_line[1]], 'r--', linewidth=1.5, alpha=0.5)
+            # Draw display angle text
+            self.ax.text(self.left_origin[0]-10, self.left_origin[1]-15, f"Display: {display_alpha:.1f}°", color='blue', fontsize=9)
+            self.ax.text(self.right_origin[0]+10, self.right_origin[1]-15, f"Display: {display_beta:.1f}°", color='red', fontsize=9)
+            # Draw arc to indicate shoulder angle (mirrored/display angle)
+            arc_radius = 22
+            arc_width = 3
+            arc_theta1_left = 270  # Start at downward (negative y)
+            arc_theta2_left = 270 + display_alpha  # End at display angle
+            arc_theta1_right = 270
+            arc_theta2_right = 270 + display_beta
+            left_arc = patches.Arc(self.left_origin, arc_radius, arc_radius, angle=0,
+                                  theta1=arc_theta1_left, theta2=arc_theta2_left,
+                                  color='blue', linewidth=arc_width)
+            right_arc = patches.Arc(self.right_origin, arc_radius, arc_radius, angle=0,
+                                   theta1=arc_theta1_right, theta2=arc_theta2_right,
+                                   color='red', linewidth=arc_width)
+            self.ax.add_patch(left_arc)
+            self.ax.add_patch(right_arc)
         """Draw the current arm configuration with proper parallel mechanism display"""
         if clear_plot:
             self.ax.clear()
             self.ax.set_xlim(-150, 150)
-            self.ax.set_ylim(-50, 200)
+            self.ax.set_ylim(-200, 50)
             self.ax.set_aspect('equal')
             self.ax.grid(True, alpha=0.3)
             self.ax.set_title('SCARA Parallel Dual Arm IK Visualization')
@@ -194,20 +224,20 @@ class IKVisualizer:
         left_l2_length = math.sqrt((target_x - left_elbow[0])**2 + (target_y - left_elbow[1])**2)
         right_l2_length = math.sqrt((target_x - right_elbow[0])**2 + (target_y - right_elbow[1])**2)
         
-        # Add text info
-        self.ax.text(-140, 180, f'Target: ({target_x:.1f}, {target_y:.1f})', fontsize=10)
-        self.ax.text(-140, 170, f'Left shoulder angle: {alpha:.1f}°', fontsize=10, color='blue')
-        self.ax.text(-140, 160, f'Right shoulder angle: {beta:.1f}°', fontsize=10, color='red')
-        
+    
+    
         # Show link lengths and verification
         self.ax.text(-140, 140, f'L1 = {self.l1}mm', fontsize=10)
         self.ax.text(-140, 130, f'L2 = {self.l2}mm', fontsize=10)
         self.ax.text(-140, 120, f'Arm separation = {self.d}mm', fontsize=10)
-        
-        # Verify link lengths
+        # Show actual shoulder angles (for debug)
+        display_y = -target_y if target_y > 0 else target_y
+        display_alpha, display_beta = self.calcIK(target_x, display_y)
+        if display_alpha is not None and display_beta is not None:
+            self.ax.text(-140, 110, f' angle left: {-display_alpha:.2f}°', fontsize=10, color='blue')
+            self.ax.text(-140, 105, f' angle right: {-display_beta:.2f}°', fontsize=10, color='red')
         self.ax.text(-140, 100, f'Left L2 actual: {left_l2_length:.1f}mm', fontsize=10, color='blue')
         self.ax.text(-140, 90, f'Right L2 actual: {right_l2_length:.1f}mm', fontsize=10, color='red')
-        
         l2_error_left = abs(left_l2_length - self.l2)
         l2_error_right = abs(right_l2_length - self.l2)
         self.ax.text(-140, 80, f'L2 error left: {l2_error_left:.2f}mm', fontsize=10, color='blue')
