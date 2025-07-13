@@ -15,10 +15,13 @@ servo_a = PWM(Pin(6))
 servo_a.freq(50)
 servo_b = PWM(Pin(7))
 servo_b.freq(50)
+servo_c = PWM(Pin(8))
+servo_c.freq(50)
 
 # Start at middle position
 position_a = 90
 position_b = 90
+position_c = 90
 
 def set_servo_a(angle):
     print("angle_a: ", angle)
@@ -38,8 +41,18 @@ def set_servo_b(angle):
     duty = int(us * 65535 // 20000)  # Convert to duty cycle (16-bit)
     servo_b.duty_u16(duty)
 
+def set_servo_c(angle):
+    print("angle_c: ", angle)
+    # Convert angle to pulse width in microseconds (typical 500-2500 us)
+    min_us = 500
+    max_us = 2500
+    us = min_us + (max_us - min_us) * angle // 180
+    duty = int(us * 65535 // 20000)  # Convert to duty cycle (16-bit)
+    servo_c.duty_u16(duty)
+
 set_servo_a(position_a)
 set_servo_b(position_b)
+set_servo_c(position_c)
 
 last_a = pin_a.value()
 last1 = pin1.value()
