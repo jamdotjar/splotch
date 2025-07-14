@@ -1,4 +1,5 @@
-![IMG_0420](https://github.com/user-attachments/assets/9b1c1b13-dc46-42f0-9b3e-6450b706fb2d)# SPLOTCH:.
+<img width="1310" height="754" alt="Card_Outline(3)" src="https://github.com/user-attachments/assets/2487dfec-449f-4cbb-a5f6-7b168b81380b" />
+# SPLOTCH:
 (**S**CARA **PLOT**ter that's **CH**eap).
 
 SPLOTCH is a parallel arm SCARA plotter, that can *usually* trick people into
@@ -9,6 +10,7 @@ it's state does represent that.
 
 ![IMG_0417](https://github.com/user-attachments/assets/d1f03a67-d499-4322-bf2d-ac6d3b8345ca)
 
+https://youtu.be/LqYqyEfOcu8
 
 # Development
 Going into this, I had literally no idea how to make a robot arm, and here I am
@@ -111,7 +113,7 @@ minicom -D /dev/tty.usbmodem1101 -b 115200
 <img width="628" height="316" alt="image" src="https://github.com/user-attachments/assets/979031ea-504b-43e0-8e03-55fa96d630dd" />
 
 # Images
-
+![IMG_0420](https://github.com/user-attachments/assets/9b1c1b13-dc46-42f0-9b3e-6450b706fb2d)
 ![IMG_0419](https://github.com/user-attachments/assets/322b42f5-4629-4236-aee8-3a008dcc70a4)
 ![IMG_0420](https://github.com/user-attachments/assets/d1830053-4332-4aed-b5b4-218b7658d24e)
 
