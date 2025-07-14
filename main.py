@@ -7,8 +7,8 @@ from machine import Pin
 class Plotter:
     def __init__(self):
         # pen lift servo angles
-        self.penZUp = 23
-        self.penZDown = 40
+        self.penZUp = 0
+        self.penZDown = 90
 
         self.C2 = 12.75  # C/2, where C is the distance between the two servos
         self.totalDist = 56.5  # distance btwn origin and servos midpoint
@@ -209,6 +209,7 @@ class Plotter:
             print(f"Failed to calculate IK for test position ({test_x}, {test_y})")
         
         print("IK test complete.\n")
+
 def main():
     # Setup IO25 as an input with a pull-up resistor
     stop_button = Pin(25, Pin.IN, Pin.PULL_UP)
@@ -218,50 +219,68 @@ def main():
     
     # Set both servos to 90 degrees
     plotter.servowrite(90, 90, smooth=False)
-    time.sleep(1)
     
-    print("Ready to receive servo angle pairs")
-    print("Format: 'angle_a,angle_b' (e.g. '120,60')")
-    print("Type 'exit' to quit")
-
-    try:
-        while True:
-            # Wait for input from computer
-            input_data = input("Enter angles (a,b): ")
-            
-            # Check for exit command
-            if input_data.lower() == 'exit':
-                print("Exiting program...")
-                break
-                
-            # Parse input
+    # Serial command handling loop
+    uart = machine.UART(0, baudrate=115200, timeout=50)  # Match baudrate with visualizer
+    print("SCARA plotter ready. Waiting for commands...")
+    uart.write("ready\n")  # Send ready message
+    
+    while True:
+        if uart.any():
             try:
-                parts = input_data.strip().split(',')
-                if len(parts) == 2:
-                    angle_a = float(parts[0])
-                    angle_b = float(parts[1])
+                raw_cmd = uart.readline()
+                if raw_cmd:
+                    cmd = raw_cmd.decode('utf-8').strip()
+                    print(f"Received command: '{cmd}'")
                     
-                    # Clamp angles to safe limits
-                    angle_a = max(min(angle_a, plotter.servo_max), plotter.servo_min)
-                    angle_b = max(min(angle_b, plotter.servo_max), plotter.servo_min)
-                    
-                    print(f"Moving to angles: a={angle_a}, b={angle_b}")
-                    plotter.servowrite(angle_a, angle_b, smooth=True)
-                else:
-                    print("Error: Invalid format. Use 'angle_a,angle_b'")
-            except ValueError:
-                print("Error: Invalid angles. Please enter numbers only.")
-                
-    except KeyboardInterrupt:
-        print("Program interrupted by user")
-    except Exception as e:
-        print(f"Error occurred: {e}")
-    finally:
-        # Make sure pen is up when exiting
-        plotter.servowrite(90, 90, smooth=False)  # Reset to neutral position
-        plotter.penUp()
-        print("Program ended")
+                    if cmd.startswith("ANGLES"):
+                        # Parse angles from ANGLES command
+                        parts = cmd.split()
+                        if len(parts) == 3:
+                            try:
+                                alpha = float(parts[1])
+                                beta = float(parts[2])
+                                print(f"Moving to angles: α={alpha:.1f}°, β={beta:.1f}°")
+                                plotter.servowrite(alpha, beta)
+                                uart.write("ok\n")
+                            except ValueError:
+                                uart.write("error: invalid angles\n")
+                        else:
+                            uart.write("error: invalid format\n")
+                    elif cmd == "U":
+                        plotter.penUp()
+                        uart.write("ok\n")
+                    elif cmd == "D":
+                        plotter.penDown()
+                        uart.write("ok\n")
+                    elif cmd.startswith("G1"):
+                        # Parse G1 X{x} Y{y} command
+                        try:
+                            x_index = cmd.find('X')
+                            y_index = cmd.find('Y')
+                            
+                            if x_index > 0 and y_index > 0:
+                                x_val = float(cmd[x_index+1:y_index].strip())
+                                y_val = float(cmd[y_index+1:].strip())
+                                plotter.drawLine(x_val, y_val)
+                                uart.write("ok\n")
+                            else:
+                                uart.write("error: invalid format\n")
+                        except ValueError:
+                            uart.write("error: invalid coordinates\n")
+                    else:
+                        uart.write(f"error: unknown command '{cmd}'\n")
+            except Exception as e:
+                print(f"Error processing command: {e}")
+                uart.write(f"error: {str(e)}\n")
+        
+        # Check for stop button press
+        if stop_button.value() == 0:
+            print("Stop button pressed, ending program")
+            break
+        
+        time.sleep(0.01)  # Short delay to prevent CPU hogging
 
-
+# Run the main function
 if __name__ == "__main__":
     main()

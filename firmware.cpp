@@ -199,29 +199,60 @@ void processIncomingLine( char* line, int charNB ) {
       buffer[1] = line[ currentIndex++ ];
       buffer[2] = line[ currentIndex++ ];
       buffer[3] = '\0';
-      switch ( atoi( buffer ) ){
-      case 300:
-        {
-          char* indexS = strchr( line+currentIndex, 'S' );
-          float Spos = atof( indexS + 1);
-          if (Spos == 30) { 
-            penDown(); 
-          }
-          if (Spos == 50) { 
-            penUp(); 
-          }
-          break;
+      break;
+    case 'A':
+      // Handle ANGLES command for direct servo angle control
+      if (line[currentIndex] == 'N' && 
+          line[currentIndex+1] == 'G' && 
+          line[currentIndex+2] == 'L' && 
+          line[currentIndex+3] == 'E' && 
+          line[currentIndex+4] == 'S') {
+            
+        currentIndex += 5;  // Skip over "NGLES"
+        
+        // Find the space after ANGLES
+        while (line[currentIndex] == ' ' && currentIndex < charNB) {
+          currentIndex++;
         }
-      case 114:                                //report position 
-        Serial.print( "Absolute position : X = " );
-        Serial.print( actuatorPos.x );
-        Serial.print( "  -  Y = " );
-        Serial.println( actuatorPos.y );
-        break;
-      default:
-        Serial.print( "Unrecognnized M command");
-        Serial.println( buffer );
+        
+        // Parse first angle (alpha)
+        float alpha = 0.0;
+        char angleBuffer[10] = {0};
+        int i = 0;
+        
+        while (line[currentIndex] != ' ' && currentIndex < charNB && i < 9) {
+          angleBuffer[i++] = line[currentIndex++];
+        }
+        angleBuffer[i] = '\0';
+        alpha = atof(angleBuffer);
+        
+        // Skip spaces between angles
+        while (line[currentIndex] == ' ' && currentIndex < charNB) {
+          currentIndex++;
+        }
+        
+        // Parse second angle (beta)
+        float beta = 0.0;
+        i = 0;
+        memset(angleBuffer, 0, 10);
+        
+        while (line[currentIndex] != ' ' && currentIndex < charNB && i < 9) {
+          angleBuffer[i++] = line[currentIndex++];
+        }
+        angleBuffer[i] = '\0';
+        beta = atof(angleBuffer);
+        
+        // Apply servo angles directly
+        servowrite(alpha, beta);
+        
+        if (verbose) {
+          Serial.print("Direct angles set - Alpha: ");
+          Serial.print(alpha);
+          Serial.print(", Beta: ");
+          Serial.println(beta);
+        }
       }
+      break;
     }
   }
 }
@@ -343,4 +374,4 @@ void penDown() {
     penservo.write(penZDown);
   }
 }
-  
+

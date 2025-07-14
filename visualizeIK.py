@@ -1,7 +1,14 @@
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-import math
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Button, TextBox
+import math
+import time
+import sys
+import os
+from serial_comm import SerialComm
+import matplotlib.patches as patches
+from matplotlib import widgets
+
 
 class IKVisualizer:
     def __init__(self):
@@ -22,6 +29,87 @@ class IKVisualizer:
         self.left_origin = np.array([0, 0])
         self.right_origin = np.array([self.d, 0])
         
+        # Initialize serial communication (None initially)
+        self.serial_comm = None
+        self.connected = False
+        
+        # Current target position and angles
+        self.current_target = (0, 0)
+        self.current_angles = (90, 90)
+        
+    def connect_serial(self, port, baudrate=115200):
+        """Establish serial connection to the Arduino"""
+        try:
+            self.serial_comm = SerialComm(port, baudrate)
+            self.connected = True
+            print(f"Connected to {port} at {baudrate} baud.")
+        except Exception as e:
+            print(f"Error connecting to serial port: {e}")
+            self.connected = False
+    
+    def close_serial(self):
+        """Close the serial connection"""
+        if self.serial_comm is not None:
+            self.serial_comm.close()
+            self.connected = False
+            print("Serial connection closed.")
+    
+    def send_command(self, command):
+        """Send a command to the Arduino over serial"""
+        if self.connected and self.serial_comm is not None:
+            self.serial_comm.send(command)
+        else:
+            print("Not connected to any serial port.")
+    
+    def connect_to_mcu(self, port='/dev/tty.usbmodem1101'):
+        """Connect to the microcontroller"""
+        try:
+            self.serial_comm = SerialComm(port=port)
+            self.connected = self.serial_comm.connected
+            if self.connected:
+                print(f"Connected to microcontroller on {port}")
+                return True
+            else:
+                print("Failed to connect to microcontroller")
+                return False
+        except Exception as e:
+            print(f"Error connecting to microcontroller: {e}")
+            self.connected = False
+            return False
+    
+    def disconnect_from_mcu(self):
+        """Disconnect from the microcontroller"""
+        if self.serial_comm is not None:
+            self.serial_comm.close()
+            self.connected = False
+            self.serial_comm = None
+            print("Disconnected from microcontroller")
+    
+    def send_angles_to_mcu(self, alpha, beta):
+        """Send calculated angles to the microcontroller"""
+        if not self.connected or self.serial_comm is None:
+            print("Not connected to microcontroller")
+            return False
+        
+        print(f"Sending angles to MCU: α={alpha:.2f}°, β={beta:.2f}°")
+        return self.serial_comm.send_servo_angles(alpha, beta)
+    
+    def pen_up(self):
+        """Send pen up command to microcontroller"""
+        if not self.connected or self.serial_comm is None:
+            print("Not connected to microcontroller")
+            return False
+        
+        return self.serial_comm.pen_up()
+    
+    def pen_down(self):
+        """Send pen down command to microcontroller"""
+        if not self.connected or self.serial_comm is None:
+            print("Not connected to microcontroller")
+            return False
+        
+        return self.serial_comm.pen_down()
+    
     def calcIK(self, x1, y1):
         """
         Calculate inverse kinematics for parallel dual arm SCARA system
@@ -173,6 +261,10 @@ class IKVisualizer:
             self.ax.text(0, 130, "Reason: Out of reach, arms cross, or servo limits.", fontsize=10, color='red', ha='center')
             return
         
+        # Store current angles
+        self.current_angles = (alpha, beta)
+        self.current_target = (target_x, target_y)
+        
         # Convert to radians for drawing
         alpha_rad = math.radians(alpha)
         beta_rad = math.radians(beta)
@@ -260,15 +352,71 @@ class IKVisualizer:
                 return
             target_x = event.xdata
             target_y = event.ydata
+            self.current_target = (target_x, target_y)
+            
+            # Calculate angles for this position
+            alpha, beta = self.calcIK(target_x, target_y)
+            if alpha is not None and beta is not None:
+                self.current_angles = (alpha, beta)
+            
             self.draw_arm_config(target_x, target_y)
             plt.draw()
         
+        # Add button for connecting to MCU
+        connect_ax = plt.axes([0.8, 0.9, 0.15, 0.05])
+        connect_button = widgets.Button(connect_ax, 'Connect to MCU')
+        
+        def on_connect(event):
+            if not self.connected:
+                if self.connect_to_mcu():
+                    connect_button.label.set_text('Disconnect')
+            else:
+                self.disconnect_from_mcu()
+                connect_button.label.set_text('Connect to MCU')
+            plt.draw()
+        
+        connect_button.on_clicked(on_connect)
+        
+        # Add button for sending angles
+        send_ax = plt.axes([0.8, 0.8, 0.15, 0.05])
+        send_button = widgets.Button(send_ax, 'Send Angles to MCU')
+        
+        def on_send_angles(event):
+            if self.connected and self.current_angles != (None, None):
+                alpha, beta = self.current_angles
+                self.send_angles_to_mcu(alpha, beta)
+            else:
+                print("Cannot send angles: not connected or no valid angles calculated")
+        
+        send_button.on_clicked(on_send_angles)
+        
+        # Add pen up/down buttons
+        pen_up_ax = plt.axes([0.8, 0.7, 0.15, 0.05])
+        pen_up_button = widgets.Button(pen_up_ax, 'Pen Up')
+        
+        def on_pen_up(event):
+            if self.connected:
+                self.pen_up()
+        
+        pen_up_button.on_clicked(on_pen_up)
+        
+        pen_down_ax = plt.axes([0.8, 0.65, 0.15, 0.05])
+        pen_down_button = widgets.Button(pen_down_ax, 'Pen Down')
+        
+        def on_pen_down(event):
+            if self.connected:
+                self.pen_down()
+        
+        pen_down_button.on_clicked(on_pen_down)
+        
+        # Connect click event
         self.fig.canvas.mpl_connect('button_press_event', on_click)
         
         # Draw initial configuration
         self.draw_arm_config(50, 100)
         
         print("Click anywhere on the plot to test IK at that position!")
+        print("Use the buttons to connect to the MCU and send angles.")
         print("Close the window to exit.")
         plt.show()
 
@@ -298,11 +446,26 @@ if __name__ == "__main__":
     print("Choose test mode:")
     print("1. Interactive test (click to set targets)")
     print("2. Test specific points")
+    print("3. Interactive test with MCU control")
     
-    choice = input("Enter choice (1 or 2): ").strip()
+    choice = input("Enter choice (1, 2, or 3): ").strip()
+    
+    visualizer = IKVisualizer()
     
     if choice == "1":
-        visualizer = IKVisualizer()
+        visualizer.interactive_test()
+    elif choice == "3":
+        # Ask for the serial port
+        default_port = '/dev/cu.usbmodem14101'  # Default port
+        port = input(f"Enter serial port (default: {default_port}): ").strip()
+        if not port:
+            port = default_port
+        
+        # Connect to MCU
+        if visualizer.connect_to_mcu(port):
+            print(f"Connected to MCU on {port}")
+        
+        # Start interactive test
         visualizer.interactive_test()
     else:
         test_specific_points()
