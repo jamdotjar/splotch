@@ -1,4 +1,4 @@
-# SPLOTCH:.
+![IMG_0420](https://github.com/user-attachments/assets/9b1c1b13-dc46-42f0-9b3e-6450b706fb2d)# SPLOTCH:.
 (**S**CARA **PLOT**ter that's **CH**eap).
 
 SPLOTCH is a parallel arm SCARA plotter, that can *usually* trick people into
@@ -6,6 +6,9 @@ thinking it draws what it's meaning to.
 
 This project was built in 72 hours as part of the Undercity Hackathon in SF, and
 it's state does represent that.
+
+![IMG_0417](https://github.com/user-attachments/assets/d1f03a67-d499-4322-bf2d-ac6d3b8345ca)
+
 
 # Development
 Going into this, I had literally no idea how to make a robot arm, and here I am
@@ -48,15 +51,17 @@ Considering the relatively lightweight requirements, you can build your own SCAR
    directions.
    The front arm should be on the top, and the back arm should be on the bottom.
 
-5. Attach the third servo to the end of the arm, in the small slot.
-6. Wire up the motors, and rotary encoders, referencing this wiring diagram:
+   ![IMG_0418](https://github.com/user-attachments/assets/f075abad-5149-4e64-8270-8f69ec2036f3)
+
+6. Attach the third servo to the end of the arm, in the small slot.
+7. Wire up the motors, and rotary encoders, referencing this wiring diagram:
 <img width="602" height="459" alt="image" src="https://github.com/user-attachments/assets/63ee224e-738d-476a-a62a-4e6fc717d8ac" />
 
-7. attach the breadboard and servo holder to the baseplate
-8. Place the case over the breadboard, make sure to reconnect wires properly
-9. Insert rotary encoders into the slots on the lid (maybe use glue), slide in
+8. attach the breadboard and servo holder to the baseplate
+9. Place the case over the breadboard, make sure to reconnect wires properly
+10. Insert rotary encoders into the slots on the lid (maybe use glue), slide in
    the lid.
-10. Done!
+11. Done!
 
 
 # Usage
@@ -104,3 +109,9 @@ minicom -D /dev/tty.usbmodem1101 -b 115200
      to see them executed.
 <img width="1174" height="876" alt="image" src="https://github.com/user-attachments/assets/50720b72-b19b-4c02-b11a-b8449cd2dd66" />
 <img width="628" height="316" alt="image" src="https://github.com/user-attachments/assets/979031ea-504b-43e0-8e03-55fa96d630dd" />
+
+# Images
+
+![IMG_0419](https://github.com/user-attachments/assets/322b42f5-4629-4236-aee8-3a008dcc70a4)
+![IMG_0420](https://github.com/user-attachments/assets/d1830053-4332-4aed-b5b4-218b7658d24e)
+
