@@ -7,8 +7,8 @@ This project was built in 72 hours as part of the Undercity Hackathon in SF, and
 
 # Development
 Going into this, I had literally no idea how to make a robot arm, and here I am now, with still almost no idea how to make a robot arm. 
-Anyways, we made this. We started by researching different mechanisms, we setteld on this because it didn't need a belt, and kept the arms relatively light. servos were used for their relative ease of use over steppers, and the fact they didn't need dedicated driver boards which were in very short supply.
-The first versions of the arm assembly were designed to not require screws, but the relative unreliability of PLA lead to a lot of broken parts, and the decisiion to screw literally everything together. ( exept for the pen holder, which was most efficient to do snap fit )
+Anyways, we made this. We started by researching different mechanisms, we setteld on this because it didn't need a belt, and kept the arms relatively light. Servos were used for their relative ease of use over steppers, and the fact they didn't need dedicated driver boards which were in very short supply.
+The first versions of the arm assembly were designed to not require screws, but the relative unreliability of PLA lead to a lot of broken parts, and thus the decisiion to screw literally everything together. ( exept for the pen holder, which was most efficient to do snap fit )
 
 # Make your own!
 Considering the relatively lightweight requirements, you can build your own SCARA plotter with a few servos, some 3d printed parts, and a pen. Specifically, you will need:
@@ -72,5 +72,3 @@ minicom -D /dev/tty.usbmodem1101 -b 115200
    - Copy the commands to your clipboard and paste them into the serial terminal to see them executed.
 <img width="1174" height="876" alt="image" src="https://github.com/user-attachments/assets/50720b72-b19b-4c02-b11a-b8449cd2dd66" />
 <img width="628" height="316" alt="image" src="https://github.com/user-attachments/assets/979031ea-504b-43e0-8e03-55fa96d630dd" />
-
-   
