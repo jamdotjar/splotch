@@ -438,14 +438,14 @@ def main():
                 except ValueError:
                     print("Error: Invalid parameters. Please enter numbers correctly.")
                 
-                time.sleep
+                time.sleep(0.05)
                 
     except KeyboardInterrupt:
         print("Program interrupted by user")
     except Exception as e:
         print(f"Error occurred: {e}")
     finally:
-        # Make sure pen is up when exiting
+        # Ma``ke sure pen is up when exiting
         plotter.servowrite(90, 90, smooth=False)  # Reset to neutral position
         plotter.penUp()
         print("Program ended")
