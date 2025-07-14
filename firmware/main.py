@@ -5,6 +5,60 @@ import time
 import machine
 from machine import Pin
 
+class RotaryEncoder:
+    def __init__(self, pin_a, pin_b, callback=None):
+        """
+        Initialize rotary encoder on the specified pins
+        pin_a: CLK pin
+        pin_b: DT pin
+        callback: Function to call when rotation is detected with direction as parameter (-1 or 1)
+        """
+        self.pin_a = Pin(pin_a, Pin.IN, Pin.PULL_UP)
+        self.pin_b = Pin(pin_b, Pin.IN, Pin.PULL_UP)
+        self.last_a = self.pin_a.value()
+        self.last_b = self.pin_b.value()
+        self.callback = callback
+        self.value = 0
+        self.last_encoder_time = time.time()
+        self.debounce_time = 0.005  # 5ms debounce
+        
+        # Set up interrupts
+        self.pin_a.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=self._on_pin_change)
+    
+    def _on_pin_change(self, pin):
+        """Interrupt handler for pin change"""
+        current_time = time.time()
+        # Debounce
+        if current_time - self.last_encoder_time < self.debounce_time:
+            return
+            
+        self.last_encoder_time = current_time
+        
+        # Read current pin states
+        a_val = self.pin_a.value()
+        b_val = self.pin_b.value()
+        
+        # Only process if A pin has changed
+        if a_val != self.last_a:
+            direction = 0
+            
+            # Determine direction based on the state of B when A changes
+            if a_val == 0:  # Falling edge of A
+                direction = -1 if b_val == 0 else 1
+            else:  # Rising edge of A
+                direction = 1 if b_val == 0 else -1
+                
+            # Update value
+            self.value += direction
+                
+            # Call the callback if set
+            if self.callback and direction != 0:
+                self.callback(direction)
+                
+        # Save current pin states
+        self.last_a = a_val
+        self.last_b = b_val
+
 class Plotter:
     def __init__(self):
         # pen lift servo angles
@@ -47,6 +101,14 @@ class Plotter:
         # Track current servo positions for smooth movement
         self.current_a = 90
         self.current_b = 90
+        
+        # Encoder movement sensitivity
+        self.encoder_step = 1.0  # degrees per encoder step
+        self.encoder_enabled = False
+        
+        # Initialize rotary encoders (default pins, can be changed if needed)
+        self.encoder_a = None
+        self.encoder_b = None
         
         # Set default movement speed
         self.setMovementSpeed('normal')
@@ -290,6 +352,76 @@ class Plotter:
         return (self.safe_zone_enabled and
                 self.safe_zone_x <= x <= self.safe_zone_x + self.safe_zone_width and
                 self.safe_zone_y - self.safe_zone_height <= y <= self.safe_zone_y)
+                
+    def init_encoders(self, pin_a1, pin_b1, pin_a2, pin_b2):
+        """
+        Initialize the rotary encoders for manual arm control
+        pin_a1, pin_b1: pins for first encoder (controls first servo)
+        pin_a2, pin_b2: pins for second encoder (controls second servo)
+        """
+        # Initialize encoders with callbacks
+        self.encoder_a = RotaryEncoder(pin_a1, pin_b1, self.on_encoder_a_change)
+        self.encoder_b = RotaryEncoder(pin_a2, pin_b2, self.on_encoder_b_change)
+        self.encoder_enabled = True
+        print("Rotary encoders initialized. Manual arm control enabled.")
+        
+    def on_encoder_a_change(self, direction):
+        """
+        Handle changes in the first encoder (controlling the first arm)
+        direction: 1 for clockwise, -1 for counter-clockwise
+        """
+        if not self.encoder_enabled:
+            return
+            
+        # Update the angle based on direction and step size
+        new_angle = self.current_a + (direction * self.encoder_step)
+        
+        # Clamp to valid range
+        new_angle = max(min(new_angle, self.servo_max), self.servo_min)
+        
+        # Move the servo
+        if new_angle != self.current_a:
+            self.xservo.move(new_angle)
+            self.current_a = new_angle
+            print(f"Encoder A: Servo A moved to {new_angle:.1f}°")
+        
+    def on_encoder_b_change(self, direction):
+        """
+        Handle changes in the second encoder (controlling the second arm)
+        direction: 1 for clockwise, -1 for counter-clockwise
+        """
+        if not self.encoder_enabled:
+            return
+            
+        # Update the angle based on direction and step size
+        new_angle = self.current_b + (direction * self.encoder_step)
+        
+        # Clamp to valid range
+        new_angle = max(min(new_angle, self.servo_max), self.servo_min)
+        
+        # Move the servo
+        if new_angle != self.current_b:
+            self.yservo.move(new_angle)
+            self.current_b = new_angle
+            print(f"Encoder B: Servo B moved to {new_angle:.1f}°")
+    
+    def set_encoder_enabled(self, enabled):
+        """
+        Enable or disable the rotary encoders
+        enabled: True to enable, False to disable
+        """
+        self.encoder_enabled = enabled
+        status = "enabled" if enabled else "disabled"
+        print(f"Rotary encoder control {status}")
+        
+    def set_encoder_sensitivity(self, step):
+        """
+        Set the sensitivity of the rotary encoders
+        step: degrees to move per encoder step
+        """
+        self.encoder_step = float(step)
+        print(f"Encoder sensitivity set to {step} degrees per step")
+        
 def read_serial_input():
     """Read input from the serial port with timeout"""
     import machine
@@ -325,6 +457,12 @@ def main():
     
     # Set both servos to 90 degrees
     plotter.servowrite(90, 90, smooth=False)
+    
+    # Initialize rotary encoders on GPIO pins (change pins as needed)
+    # First encoder - pins 2, 3 for servo A
+    # Second encoder - pins 4, 5 for servo B
+    plotter.init_encoders(2, 3, 4, 5)
+    
     time.sleep(1)
     
     print("\n\n***** PLOTTER READY *****")
@@ -335,6 +473,8 @@ def main():
     print("  'pen:up' or 'pen:down' - Move pen up or down, pen:dot to move up and down quickly')")
     print("  'safe:x,y,w,h' - Set safe zone (paper) parameters (e.g. 'safe:-50,100,100,100')")
     print("  'safe:on' or 'safe:off' - Enable or disable safe zone checks")
+    print("  'enc:on' or 'enc:off' - Enable or disable encoder (manual) control")
+    print("  'enc:step:X' - Set encoder sensitivity (X = degrees per step, e.g. 'enc:step:0.5')")
     print("  'exit' - Quit program")
     print("**************************")
 
@@ -419,6 +559,22 @@ def main():
                             except ValueError:
                                 print("Error: Invalid safe zone parameters. Use numbers only.")
                     
+                    # Check if it's an encoder command
+                    elif cmd.startswith('enc:'):
+                        enc_params = cmd[4:].strip()
+                        if enc_params.lower() == 'on':
+                            plotter.set_encoder_enabled(True)
+                        elif enc_params.lower() == 'off':
+                            plotter.set_encoder_enabled(False)
+                        elif enc_params.startswith('step:'):
+                            try:
+                                step_value = float(enc_params[5:])
+                                plotter.set_encoder_sensitivity(step_value)
+                            except ValueError:
+                                print("Error: Invalid encoder step value. Use a number (e.g. 'enc:step:0.5')")
+                        else:
+                            print("Error: Invalid encoder command. Use 'enc:on', 'enc:off', or 'enc:step:X'")
+                    
                     # Otherwise assume it's a servo angle pair
                     else:
                         parts = cmd.strip().split(',')
@@ -438,14 +594,14 @@ def main():
                 except ValueError:
                     print("Error: Invalid parameters. Please enter numbers correctly.")
                 
-                time.sleep
+                time.sleep(0.05)
                 
     except KeyboardInterrupt:
         print("Program interrupted by user")
     except Exception as e:
         print(f"Error occurred: {e}")
     finally:
-        # Make sure pen is up when exiting
+        # Ma``ke sure pen is up when exiting
         plotter.servowrite(90, 90, smooth=False)  # Reset to neutral position
         plotter.penUp()
         print("Program ended")

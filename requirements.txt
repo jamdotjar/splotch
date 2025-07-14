@@ -1,0 +1,7 @@
+# Requirements for SCARA Plotter Project
+
+mpremote>=1.20.0      # For file transfer and remote REPL
+matplotlib>=3.5.0     # For plotting and visualization
+numpy>=1.22.0         # For numerical operations
+pyserial>=3.5         # For serial communication with the device
+pyperclip>=1.8.2      # For copying commands to clipboard

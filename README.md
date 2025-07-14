@@ -30,6 +30,7 @@ Considering the relatively lightweight requirements, you can build your own SCAR
 3. Attach the holder to the baseplate, in the center of the bottom edge. The curved corners of the baseplate should be facing forwards, and the wires of the servos should be facing backwards.
 4. Attach the front and back links of each arm. The m.2 screw should pass through the first arm and bore into the second arm, securing them together and allowing room for rotation. The screws on the two front arms will face opposite directions, and the screws on the two back arms will face opposite directions.
 The front arm should be on the top, and the back arm should be on the bottom.
+
 5. Attach the third servo to the end of the arm, in the small slot.
 6. Wire up the motors, and rotary encoders, referencing this wiring diagram:
 <img width="602" height="459" alt="image" src="https://github.com/user-attachments/assets/63ee224e-738d-476a-a62a-4e6fc717d8ac" />
