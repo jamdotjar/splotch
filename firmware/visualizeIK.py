@@ -7,6 +7,22 @@ import serial
 import time
 import sys
 import glob
+import signal
+import atexit
+
+# Track application state for clean exit
+app_running = True
+
+def signal_handler(sig, frame):
+    """Handle termination signals gracefully"""
+    global app_running
+    print("\nReceived termination signal. Cleaning up...")
+    app_running = False
+    plt.close('all')
+    
+# Register signal handlers
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 class IKVisualizer:
     def __init__(self):
@@ -26,6 +42,8 @@ class IKVisualizer:
         self.serial_port = None
         self.connected = False
         self.serial_baudrate = 115200  # Default baudrate
+        self.last_serial_activity = 0  # Track when we last used the serial port
+        self.serial_heartbeat_interval = 10  # Seconds between heartbeats
         
         # Keep track of current position and pen state
         self.current_x = 0
@@ -128,7 +146,8 @@ class IKVisualizer:
         elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
             ports = glob.glob('/dev/tty[A-Za-z]*')
         elif sys.platform.startswith('darwin'):
-            ports = glob.glob('/dev/tty.usbmodem*')
+            # On macOS, expand to include all common USB-Serial port patterns
+            ports = glob.glob('/dev/tty.usbmodem*') + glob.glob('/dev/tty.usbserial*') + glob.glob('/dev/tty.SLAB_USBtoUART*')
         else:
             raise EnvironmentError('Unsupported platform')
 
@@ -191,10 +210,19 @@ class IKVisualizer:
                 
             try:
                 selection = input(f"Select port (1-{len(available_ports)}) or enter full port name: ").strip()
+                # Clean input from escape sequences or control characters
+                selection = ''.join(c for c in selection if ord(c) >= 32 and ord(c) < 127)
+                
                 if selection.isdigit() and 1 <= int(selection) <= len(available_ports):
                     port = available_ports[int(selection)-1]
                 else:
                     port = selection  # Use directly entered port name
+                    
+                # Double check that we have a valid port string
+                if not port or any(c for c in port if ord(c) < 32):
+                    self.update_status("Invalid port selection")
+                    return
+                    
             except (ValueError, IndexError):
                 self.update_status("Invalid selection")
                 return
@@ -209,6 +237,10 @@ class IKVisualizer:
             # Open the port with more verbose error reporting
             print(f"Opening serial port {port} at {self.serial_baudrate} baud")
             
+            # Additional validation of the port string
+            if not isinstance(port, str) or not port or any(c for c in port if ord(c) < 32):
+                raise ValueError(f"Invalid port name: {repr(port)}")
+                
             # Create a class attribute to store the port reference
             # This is CRITICAL to prevent the port from being garbage collected
             self._port_reference = serial.Serial(
@@ -222,10 +254,6 @@ class IKVisualizer:
                 dsrdtr=False,      # No hardware flow control
                 rtscts=False,      # No hardware flow control
                 xonxoff=False,     # No software flow control
-                # CRITICAL: Add these parameters to prevent auto-reset
-                # Prevent toggling of DTR/RTS which can cause device resets
-                dtr=False,
-                rts=False
             )
             
             # Assign to the instance variable AFTER successful creation
@@ -327,6 +355,9 @@ class IKVisualizer:
                 self.serial_port.flush()
                 print("Command flushed to port")
                 
+                # Track the time of last activity
+                self.last_serial_activity = time.time()
+                
                 # Add a small delay after sending to let the device process
                 time.sleep(0.1)
                 
@@ -339,6 +370,12 @@ class IKVisualizer:
             import traceback
             traceback.print_exc()
             self.update_status(f"Send error: {e}")
+            
+            # Handle disconnection
+            if "Port is closed" in str(e) or "Device disconnected" in str(e):
+                self.connected = False
+                self.update_status("Device disconnected")
+                
             return False
     
     def read_response(self, timeout=3):
@@ -389,6 +426,9 @@ class IKVisualizer:
                             all_data.extend(chunk)
                             print(f"Read chunk: {chunk}")
                             
+                            # Track the time of last activity
+                            self.last_serial_activity = time.time()
+                            
                             # Try to decode what we have so far
                             try:
                                 response = all_data.decode('utf-8', errors='replace').strip()
@@ -438,6 +478,40 @@ class IKVisualizer:
                 
             return None
 
+    def send_heartbeat(self):
+        """Send a heartbeat command to keep the connection alive"""
+        if not self.connected or not self.serial_port:
+            return False
+            
+        # Only send heartbeat if we haven't communicated recently
+        current_time = time.time()
+        if current_time - self.last_serial_activity < self.serial_heartbeat_interval:
+            return True
+            
+        # Send a simple command that won't affect operation
+        try:
+            if not self.serial_port.is_open:
+                print("Port closed when attempting heartbeat - reconnecting...")
+                try:
+                    self.serial_port.open()
+                    time.sleep(0.5)
+                except Exception as e:
+                    print(f"Failed to reopen port for heartbeat: {e}")
+                    self.connected = False
+                    return False
+                    
+            # Use a simple status request command
+            self.serial_port.write(b"status\r\n")
+            self.serial_port.flush()
+            self.last_serial_activity = current_time
+            return True
+            
+        except Exception as e:
+            print(f"Heartbeat failed: {e}")
+            if "Port is closed" in str(e) or "Device disconnected" in str(e):
+                self.connected = False
+            return False
+    
     def on_send_position(self, event):
         """Send the current position to the device"""
         if not self.connected or not self.serial_port:
@@ -485,7 +559,6 @@ class IKVisualizer:
                 self.update_status(f"Command sent, no response received")
                 
         self.draw_arm_config(self.current_x, self.current_y)
-    
     def on_pen_down(self, event):
         """Send pen down command to the device"""
         if not self.connected or not self.serial_port:
@@ -757,7 +830,31 @@ class IKVisualizer:
             target_y = event.ydata
             self.draw_arm_config(target_x, target_y)
         
+        # Connect click handler
         self.fig.canvas.mpl_connect('button_press_event', on_click)
+        
+        # Add a heartbeat timer
+        def heartbeat_callback(event):
+            if self.connected:
+                self.send_heartbeat()
+        
+        # Create a timer for heartbeat (every 5 seconds)
+        heartbeat_timer = self.fig.canvas.new_timer(interval=5000)
+        heartbeat_timer.add_callback(heartbeat_callback)
+        heartbeat_timer.start()
+        
+        # Add a close event handler to ensure clean shutdown
+        def handle_close(event):
+            print("Window close event detected, cleaning up...")
+            if hasattr(self, 'serial_port') and self.serial_port:
+                try:
+                    if self.serial_port.is_open:
+                        self.serial_port.close()
+                    print("Serial connection closed on window close")
+                except Exception as e:
+                    print(f"Error during cleanup: {e}")
+            
+        self.fig.canvas.mpl_connect('close_event', handle_close)
         
         # Draw initial configuration
         self.draw_arm_config(50, 100)
@@ -780,7 +877,14 @@ class IKVisualizer:
         
         plt.tight_layout()
         plt.subplots_adjust(bottom=0.15)  # Make room for buttons
-        plt.show()
+        
+        # Use this instead of plt.show() to better handle exceptions
+        try:
+            plt.show(block=True)
+        except Exception as e:
+            print(f"Exception in matplotlib event loop: {e}")
+            import traceback
+            traceback.print_exc()
 
     def set_safe_zone(self, x, y, width, height, enabled=True):
         """Configure the safe zone (paper area) dimensions and position"""
@@ -800,11 +904,33 @@ class IKVisualizer:
                 self.safe_zone_y - self.safe_zone_height <= y <= self.safe_zone_y)
 
 if __name__ == "__main__":
-    visualizer = IKVisualizer()
+    # Register cleanup function
+    def cleanup():
+        print("Program exiting, cleaning up resources...")
+        # Any additional cleanup can be done here
+    
+    atexit.register(cleanup)
+    
+    visualizer = None
     try:
+        print("Starting IK Visualizer...")
+        visualizer = IKVisualizer()
         visualizer.interactive_test()
+    except KeyboardInterrupt:
+        print("\nProgram interrupted by user.")
+    except Exception as e:
+        import traceback
+        print(f"Unexpected error: {e}")
+        traceback.print_exc()
     finally:
         # Clean up serial connection if it exists
-        if hasattr(visualizer, 'serial_port') and visualizer.serial_port:
-            visualizer.serial_port.close()
-            print("Serial connection closed")
+        if visualizer and hasattr(visualizer, 'serial_port') and visualizer.serial_port:
+            try:
+                visualizer.serial_port.close()
+                print("Serial connection closed")
+            except Exception as e:
+                print(f"Error closing serial connection: {e}")
+        
+        # Close all matplotlib figures
+        plt.close('all')
+        print("Visualization terminated.")

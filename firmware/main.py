@@ -8,8 +8,8 @@ from machine import Pin
 class Plotter:
     def __init__(self):
         # pen lift servo angles
-        self.penZUp = 23
-        self.penZDown = 40
+        self.penZUp = 30
+        self.penZDown = 45
 
         self.C2 = 12.75  # C/2, where C is the distance between the two servos
         self.totalDist = 56.5  # distance btwn origin and servos midpoint
@@ -103,12 +103,6 @@ class Plotter:
         # Scale delay based on movement distance
         movement_delay = max(0.1, max_diff * 0.008)  # 8ms per degree of movement
         time.sleep(movement_delay)
-
-    def ease_in_out(self, t):
-        """
-        Easing function for smoother servo movement
-        """
-        return t * t * (3.0 - 2.0 * t)
 
     def setMovementSpeed(self, speed='normal'):
         """
@@ -338,7 +332,7 @@ def main():
     print("Commands:")
     print("  'angle_a,angle_b' - Move to servo angles (e.g. '120,60')")
     print("  'xy:x,y' - Move to XY coordinates (e.g. 'xy:50,80')")
-    print("  'pen:up' or 'pen:down' - Move pen up or down")
+    print("  'pen:up' or 'pen:down' - Move pen up or down, pen:dot to move up and down quickly')")
     print("  'safe:x,y,w,h' - Set safe zone (paper) parameters (e.g. 'safe:-50,100,100,100')")
     print("  'safe:on' or 'safe:off' - Enable or disable safe zone checks")
     print("  'exit' - Quit program")
@@ -347,7 +341,7 @@ def main():
     try:
         while True:
             # Print a prompt
-            print("\nEnter command > ", end="")
+            print("\nEnter command(s) > ", end="")
             
             # Wait for input using a simpler approach
             input_data = ""
@@ -365,77 +359,86 @@ def main():
             if input_data.lower() == 'exit':
                 print("Exiting program...")
                 break
-                
-            # Parse input
-            try:
-                # Check if it's a coordinate command
-                if input_data.startswith('xy:'):
-                    coords = input_data[3:].strip().split(',')
-                    if len(coords) == 2:
-                        x = float(coords[0])
-                        y = float(coords[1])
-                        print(f"Moving to coordinates: ({x}, {y})")
-                        plotter.drawLine(x, y)
+            # check if input contains multiple commands
+            commands = input_data.split(';')
+            for cmd in commands:
+                # Parse input
+                try:
+                    # Check if it's a coordinate command
+                    if input_data.startswith('xy:'):
+                        coords = cmd[3:].strip().split(',')
+                        if len(coords) == 2:
+                            x = float(coords[0])
+                            y = float(coords[1])
+                            print(f"Moving to coordinates: ({x}, {y})")
+                            plotter.drawLine(x, y)
+                        else:
+                            print("Error: Invalid format. Use 'xy:x,y'")
+                    
+                    # Check if it's a pen command
+                    elif cmd.startswith('pen:'):
+                        pen_action = cmd[4:].strip().lower()
+                        if pen_action == 'up':
+                            plotter.penUp()
+                            print("Pen moved up")
+                        elif pen_action == 'down':
+                            plotter.penDown()
+                            print("Pen moved down")
+                        elif pen_action == 'dot':
+                            plotter.penDown()
+                            time.sleep(0.1)
+                            plotter.penUp()
+                            print("Pen moved up and down quickly")
+                        else:
+                            print("Error: Invalid pen command. Use 'pen:up' or 'pen:down'")
+                    
+                    # Check if it's a safe zone command
+                    elif cmd.startswith('safe:'):
+                        safe_params = cmd[5:].strip()
+                        if safe_params.lower() == 'on':
+                            plotter.safe_zone_enabled = True
+                            print(f"Safe zone checks enabled")
+                        elif safe_params.lower() == 'off':
+                            plotter.safe_zone_enabled = False
+                            print(f"Safe zone checks disabled")
+                        else:
+                            try:
+                                params = safe_params.split(',')
+                                if len(params) == 4:
+                                    x = float(params[0])
+                                    y = float(params[1])
+                                    w = float(params[2])
+                                    h = float(params[3])
+                                    plotter.safe_zone_x = x
+                                    plotter.safe_zone_y = y
+                                    plotter.safe_zone_width = w
+                                    plotter.safe_zone_height = h
+                                    print(f"Safe zone set to: x={x}, y={y}, width={w}, height={h}")
+                                else:
+                                    print("Error: Invalid format. Use 'safe:x,y,width,height'")
+                            except ValueError:
+                                print("Error: Invalid safe zone parameters. Use numbers only.")
+                    
+                    # Otherwise assume it's a servo angle pair
                     else:
-                        print("Error: Invalid format. Use 'xy:x,y'")
+                        parts = cmd.strip().split(',')
+                        if len(parts) == 2:
+                            angle_a = float(parts[0])
+                            angle_b = float(parts[1])
+                            
+                            # Clamp angles to safe limits
+                            angle_a = max(min(angle_a, plotter.servo_max), plotter.servo_min)
+                            angle_b = max(min(angle_b, plotter.servo_max), plotter.servo_min)
+                            
+                            print(f"Moving to angles: a={angle_a}, b={angle_b}")
+                            plotter.servowrite(angle_a, angle_b, smooth=True)
+                        else:
+                            print("Error: Invalid format. Use 'angle_a,angle_b'")
+                            
+                except ValueError:
+                    print("Error: Invalid parameters. Please enter numbers correctly.")
                 
-                # Check if it's a pen command
-                elif input_data.startswith('pen:'):
-                    pen_action = input_data[4:].strip().lower()
-                    if pen_action == 'up':
-                        plotter.penUp()
-                        print("Pen moved up")
-                    elif pen_action == 'down':
-                        plotter.penDown()
-                        print("Pen moved down")
-                    else:
-                        print("Error: Invalid pen command. Use 'pen:up' or 'pen:down'")
-                
-                # Check if it's a safe zone command
-                elif input_data.startswith('safe:'):
-                    safe_params = input_data[5:].strip()
-                    if safe_params.lower() == 'on':
-                        plotter.safe_zone_enabled = True
-                        print(f"Safe zone checks enabled")
-                    elif safe_params.lower() == 'off':
-                        plotter.safe_zone_enabled = False
-                        print(f"Safe zone checks disabled")
-                    else:
-                        try:
-                            params = safe_params.split(',')
-                            if len(params) == 4:
-                                x = float(params[0])
-                                y = float(params[1])
-                                w = float(params[2])
-                                h = float(params[3])
-                                plotter.safe_zone_x = x
-                                plotter.safe_zone_y = y
-                                plotter.safe_zone_width = w
-                                plotter.safe_zone_height = h
-                                print(f"Safe zone set to: x={x}, y={y}, width={w}, height={h}")
-                            else:
-                                print("Error: Invalid format. Use 'safe:x,y,width,height'")
-                        except ValueError:
-                            print("Error: Invalid safe zone parameters. Use numbers only.")
-                
-                # Otherwise assume it's a servo angle pair
-                else:
-                    parts = input_data.strip().split(',')
-                    if len(parts) == 2:
-                        angle_a = float(parts[0])
-                        angle_b = float(parts[1])
-                        
-                        # Clamp angles to safe limits
-                        angle_a = max(min(angle_a, plotter.servo_max), plotter.servo_min)
-                        angle_b = max(min(angle_b, plotter.servo_max), plotter.servo_min)
-                        
-                        print(f"Moving to angles: a={angle_a}, b={angle_b}")
-                        plotter.servowrite(angle_a, angle_b, smooth=True)
-                    else:
-                        print("Error: Invalid format. Use 'angle_a,angle_b'")
-                        
-            except ValueError:
-                print("Error: Invalid parameters. Please enter numbers correctly.")
+                time.sleep
                 
     except KeyboardInterrupt:
         print("Program interrupted by user")
