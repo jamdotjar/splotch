@@ -50,6 +50,7 @@ Considering the relatively lightweight requirements, you can build your own SCAR
 5. Attach the third servo to the end of the arm, in the small slot.
 6. Wire up the motors, and rotary encoders, referencing this wiring diagram:
 <img width="602" height="459" alt="image" src="https://github.com/user-attachments/assets/63ee224e-738d-476a-a62a-4e6fc717d8ac" />
+
 7. attach the breadboard and servo holder to the baseplate
 8. Place the case over the breadboard, make sure to reconnect wires properly
 9. Insert rotary encoders into the slots on the lid (maybe use glue), slide in
@@ -60,7 +61,8 @@ Considering the relatively lightweight requirements, you can build your own SCAR
 # Usage
 1. Connect the Raspberry Pi Pico to your computer via USB.
 2. Setup python enviroment by running:
-```pip install -r requirements.txt
+```bash
+pip install -r requirements.txt
 ```
 3. Flash the firmware to the Pico by running:
 ```bash
