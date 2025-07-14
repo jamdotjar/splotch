@@ -1,3 +1,4 @@
+import sys
 from servo import Servo
 import math
 import time
@@ -24,6 +25,13 @@ class Plotter:
         self.Xmin = -100
         self.Ymax = 100
         self.Ymin = -100
+        
+        # Safe zone parameters (configurable paper area)
+        self.safe_zone_enabled = True
+        self.safe_zone_width = 100  # mm
+        self.safe_zone_height = 100  # mm
+        self.safe_zone_x = -50  # mm (left edge position)
+        self.safe_zone_y = -200  # mm (bottom edge position)
         
         # Servo angle limits (degrees)
         self.servo_min = 0
@@ -117,15 +125,8 @@ class Plotter:
             self.servo_delay = 0.05
             self.servo_steps_per_degree = 1.5
     def calcIK(self, x1, y1):
-        """
-        Calculate inverse kinematics for dual arm SCARA system
-        Based on the provided IK equations from the diagram
-        """
-        # Convert input coordinates to the SCARA coordinate system
         x = x1
         y = y1
-        
-        # SCARA parameters
         a1 = self.l1  # first link length
         a2 = self.l2  # second link length
         d = self.d  # distance between arm origins
@@ -135,34 +136,103 @@ class Plotter:
             c = math.sqrt((x**2) + (y**2))  # distance from left arm origin to target
             e = math.sqrt(((d-x)**2) + (y**2))  # distance from right arm origin to target
             
-            # Check if target is within reach
-            if c > a1 + a2 or e > a1 + a2:
-                print(f"Position ({x}, {y}) is out of reach")
+            # Check if target is within reach for both arms
+            if c > a1 + a2 or c < abs(a1 - a2):
+                print(f"Position ({x}, {y}) is out of reach for left arm")
                 return None, None
+            if e > a1 + a2 or e < abs(a1 - a2):
+                print(f"Position ({x}, {y}) is out of reach for right arm")
+                return None, None
+                
+            # Calculate elbow angles
+            cos_q2_left = (c**2 - a1**2 - a2**2) / (2 * a1 * a2)
+            if abs(cos_q2_left) > 1:
+                print(f"Left arm: Invalid cosine value {cos_q2_left}")
+                return None, None
+            q2_left = math.acos(cos_q2_left)
             
-            # Calculate angles directly (similar to the example)
-            # Left arm angle calculation
-            try:
-                t1 = math.atan(y/x) + math.acos(((a1**2) + (c**2) - (a2**2))/(2*a1*c))
-            except ZeroDivisionError:
-            # Handle case where x = 0
-                t1 = math.pi/2 + math.acos(((a1**2) + (c**2) - (a2**2))/(2*a1*c))
+            cos_q2_right = (e**2 - a1**2 - a2**2) / (2 * a1 * a2)
+            if abs(cos_q2_right) > 1:
+                print(f"Right arm: Invalid cosine value {cos_q2_right}")
+                return None, None
+            q2_right = -math.acos(cos_q2_right)
             
-            # Right arm angle calculation
-            try:
-                t2 = math.atan(y/(d-x)) + math.acos(((a1**2) + (e**2) - (a2**2))/(2*a1*e))
-            except ZeroDivisionError:
-            # Handle case where d-x = 0
-                t2 = math.pi/2 + math.acos(((a1**2) + (e**2) - (a2**2))/(2*a1*e))
+            # Calculate shoulder angles
+            if x == 0:
+                q1_left = math.pi/2 if y > 0 else -math.pi/2
+            else:
+                k1 = a1 + a2 * math.cos(q2_left)
+                k2 = a2 * math.sin(q2_left)
+                q1_left = math.atan2(y, x) - math.atan2(k2, k1)
+                
+            x_right = x - d
+            if x_right == 0:
+                q1_right = math.pi/2 if y > 0 else -math.pi/2
+            else:
+                k1_right = a1 + a2 * math.cos(q2_right)
+                k2_right = a2 * math.sin(q2_right)
+                q1_right = math.atan2(y, x_right) - math.atan2(k2_right, k1_right)
             
-            # Convert to degrees
-            alpha_deg = math.degrees(t1)
-            beta_deg = 180 - math.degrees(t2)  # As per the example
+            # Convert to degrees for servo control
+            alpha_deg = math.degrees(q1_left)
+            beta_deg = math.degrees(q1_right)
             
-            return alpha_deg, beta_deg
+            # IMPORTANT: For display purposes, we want to use the mirrored angles
+            # similar to what's shown in the visualizer
+            display_y = -y if y > 0 else y
+            display_alpha, display_beta = self.calcDisplayAngles(x, display_y)
+            
+            # Return display angles for actual servo control
+            return -display_alpha, -display_beta
             
         except (ValueError, ZeroDivisionError) as e:
             print(f"Error calculating IK for ({x}, {y}): {e}")
+            return None, None
+            
+    def calcDisplayAngles(self, x, y):
+        """
+        Helper function to calculate display angles (mirrored angles)
+        These are the angles shown in the visualizer
+        """
+        a1 = self.l1
+        a2 = self.l2
+        d = self.d
+        
+        try:
+            c = math.sqrt((x**2) + (y**2))
+            e = math.sqrt(((d-x)**2) + (y**2))
+            
+            if c > a1 + a2 or c < abs(a1 - a2) or e > a1 + a2 or e < abs(a1 - a2):
+                return None, None
+                
+            cos_q2_left = (c**2 - a1**2 - a2**2) / (2 * a1 * a2)
+            if abs(cos_q2_left) > 1:
+                return None, None
+            q2_left = math.acos(cos_q2_left)
+            
+            if x == 0:
+                q1_left = math.pi/2 if y > 0 else -math.pi/2
+            else:
+                k1 = a1 + a2 * math.cos(q2_left)
+                k2 = a2 * math.sin(q2_left)
+                q1_left = math.atan2(y, x) - math.atan2(k2, k1)
+                
+            x_right = x - d
+            cos_q2_right = (e**2 - a1**2 - a2**2) / (2 * a1 * a2)
+            if abs(cos_q2_right) > 1:
+                return None, None
+            q2_right = -math.acos(cos_q2_right)
+            
+            if x_right == 0:
+                q1_right = math.pi/2 if y > 0 else -math.pi/2
+            else:
+                k1_right = a1 + a2 * math.cos(q2_right)
+                k2_right = a2 * math.sin(q2_right)
+                q1_right = math.atan2(y, x_right) - math.atan2(k2_right, k1_right)
+                
+            return math.degrees(q1_left), math.degrees(q1_right)
+            
+        except (ValueError, ZeroDivisionError):
             return None, None
 
     def drawLine(self, x1, y1):
@@ -172,6 +242,12 @@ class Plotter:
         # Clamp coordinates
         x1 = max(min(x1, self.Xmax), self.Xmin)
         y1 = max(min(y1, self.Ymax), self.Ymin)
+        
+        # Check if the point is within the safe zone (paper area)
+        in_safe_zone = self.is_point_in_safe_zone(x1, y1)
+        if not in_safe_zone and self.safe_zone_enabled:
+            print(f"WARNING: Position ({x1}, {y1}) is outside the safe zone (paper area)")
+            # Continue anyway, but give a warning
 
         # Calculate servo angles using IK
         alpha, beta = self.calcIK(x1, y1)
@@ -184,6 +260,8 @@ class Plotter:
             # Move servos to calculated angles
             self.servowrite(alpha, beta)
             print(f"Moving to ({x1}, {y1}) -> Servo angles: α={alpha:.1f}°, β={beta:.1f}°")
+            if not in_safe_zone and self.safe_zone_enabled:
+                print("CAUTION: Point is outside the paper area!")
         else:
             print(f"Cannot reach position ({x1}, {y1})")
 
@@ -209,6 +287,41 @@ class Plotter:
             print(f"Failed to calculate IK for test position ({test_x}, {test_y})")
         
         print("IK test complete.\n")
+    
+    def is_point_in_safe_zone(self, x, y):
+        """
+        Check if a point is within the safe zone (paper area)
+        Returns True if the point is within the safe zone, False otherwise
+        """
+        return (self.safe_zone_enabled and
+                self.safe_zone_x <= x <= self.safe_zone_x + self.safe_zone_width and
+                self.safe_zone_y - self.safe_zone_height <= y <= self.safe_zone_y)
+def read_serial_input():
+    """Read input from the serial port with timeout"""
+    import machine
+    import utime
+    
+    # Use the hardware UART connected to your USB/Serial adapter
+    # Adjust UART number (0 or 1) and baud rate as needed for your board
+    uart = machine.UART(0, baudrate=115200)
+    uart.init(115200, bits=8, parity=None, stop=1)
+    
+    # Clear any pending data
+    uart.read()
+    
+    # Wait for a line of input with timeout
+    data = b''
+    start_time = utime.time()
+    timeout = 0.1  # 100ms timeout
+    
+    while not data.endswith(b'\n') and (utime.time() - start_time) < timeout:
+        if uart.any():
+            char = uart.read(1)
+            if char:
+                data += char
+        utime.sleep(0.01)
+    
+    return data.decode().strip()
 def main():
     # Setup IO25 as an input with a pull-up resistor
     stop_button = Pin(25, Pin.IN, Pin.PULL_UP)
@@ -220,14 +333,33 @@ def main():
     plotter.servowrite(90, 90, smooth=False)
     time.sleep(1)
     
-    print("Ready to receive servo angle pairs")
-    print("Format: 'angle_a,angle_b' (e.g. '120,60')")
-    print("Type 'exit' to quit")
+    print("\n\n***** PLOTTER READY *****")
+    print("Ready to receive commands")
+    print("Commands:")
+    print("  'angle_a,angle_b' - Move to servo angles (e.g. '120,60')")
+    print("  'xy:x,y' - Move to XY coordinates (e.g. 'xy:50,80')")
+    print("  'pen:up' or 'pen:down' - Move pen up or down")
+    print("  'safe:x,y,w,h' - Set safe zone (paper) parameters (e.g. 'safe:-50,100,100,100')")
+    print("  'safe:on' or 'safe:off' - Enable or disable safe zone checks")
+    print("  'exit' - Quit program")
+    print("**************************")
 
     try:
         while True:
-            # Wait for input from computer
-            input_data = input("Enter angles (a,b): ")
+            # Print a prompt
+            print("\nEnter command > ", end="")
+            
+            # Wait for input using a simpler approach
+            input_data = ""
+            try:
+                # Try to use regular input first (works in REPL and many serial terminals)
+                input_data = input().strip()
+            except Exception:
+                # If input() fails, fall back to reading from stdin directly
+                input_data = sys.stdin.readline().strip()
+                
+            # Print confirmation of received command
+            print(f"\nReceived command: '{input_data}'")
             
             # Check for exit command
             if input_data.lower() == 'exit':
@@ -236,21 +368,74 @@ def main():
                 
             # Parse input
             try:
-                parts = input_data.strip().split(',')
-                if len(parts) == 2:
-                    angle_a = float(parts[0])
-                    angle_b = float(parts[1])
-                    
-                    # Clamp angles to safe limits
-                    angle_a = max(min(angle_a, plotter.servo_max), plotter.servo_min)
-                    angle_b = max(min(angle_b, plotter.servo_max), plotter.servo_min)
-                    
-                    print(f"Moving to angles: a={angle_a}, b={angle_b}")
-                    plotter.servowrite(angle_a, angle_b, smooth=True)
+                # Check if it's a coordinate command
+                if input_data.startswith('xy:'):
+                    coords = input_data[3:].strip().split(',')
+                    if len(coords) == 2:
+                        x = float(coords[0])
+                        y = float(coords[1])
+                        print(f"Moving to coordinates: ({x}, {y})")
+                        plotter.drawLine(x, y)
+                    else:
+                        print("Error: Invalid format. Use 'xy:x,y'")
+                
+                # Check if it's a pen command
+                elif input_data.startswith('pen:'):
+                    pen_action = input_data[4:].strip().lower()
+                    if pen_action == 'up':
+                        plotter.penUp()
+                        print("Pen moved up")
+                    elif pen_action == 'down':
+                        plotter.penDown()
+                        print("Pen moved down")
+                    else:
+                        print("Error: Invalid pen command. Use 'pen:up' or 'pen:down'")
+                
+                # Check if it's a safe zone command
+                elif input_data.startswith('safe:'):
+                    safe_params = input_data[5:].strip()
+                    if safe_params.lower() == 'on':
+                        plotter.safe_zone_enabled = True
+                        print(f"Safe zone checks enabled")
+                    elif safe_params.lower() == 'off':
+                        plotter.safe_zone_enabled = False
+                        print(f"Safe zone checks disabled")
+                    else:
+                        try:
+                            params = safe_params.split(',')
+                            if len(params) == 4:
+                                x = float(params[0])
+                                y = float(params[1])
+                                w = float(params[2])
+                                h = float(params[3])
+                                plotter.safe_zone_x = x
+                                plotter.safe_zone_y = y
+                                plotter.safe_zone_width = w
+                                plotter.safe_zone_height = h
+                                print(f"Safe zone set to: x={x}, y={y}, width={w}, height={h}")
+                            else:
+                                print("Error: Invalid format. Use 'safe:x,y,width,height'")
+                        except ValueError:
+                            print("Error: Invalid safe zone parameters. Use numbers only.")
+                
+                # Otherwise assume it's a servo angle pair
                 else:
-                    print("Error: Invalid format. Use 'angle_a,angle_b'")
+                    parts = input_data.strip().split(',')
+                    if len(parts) == 2:
+                        angle_a = float(parts[0])
+                        angle_b = float(parts[1])
+                        
+                        # Clamp angles to safe limits
+                        angle_a = max(min(angle_a, plotter.servo_max), plotter.servo_min)
+                        angle_b = max(min(angle_b, plotter.servo_max), plotter.servo_min)
+                        
+                        print(f"Moving to angles: a={angle_a}, b={angle_b}")
+                        plotter.servowrite(angle_a, angle_b, smooth=True)
+                    else:
+                        print("Error: Invalid format. Use 'angle_a,angle_b'")
+                        
             except ValueError:
-                print("Error: Invalid angles. Please enter numbers only.")
+                print("Error: Invalid parameters. Please enter numbers correctly.")
                 
     except KeyboardInterrupt:
         print("Program interrupted by user")
