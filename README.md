@@ -21,12 +21,13 @@ efficient to do snap fit )
 
 # Make your own!
 Considering the relatively lightweight requirements, you can build your own SCARA plotter with a few servos, some 3d printed parts, and a pen. Specifically, you will need:
-| Component               | Description                                      | Quantity | Link |
-|-------------------------|--------------------------------------------------|----------|------|
-| Servos                  | G996R or similar for arm joints, and pen lifter             | 3       | https://towerpro.com.tw/product/sg90-analog/ |
-| 3D printed parts        | 4 3D printed arms, servo holder, and case                              | 1        | |
-| Pen                     | Any standard pen or marker, should be no more than 9mm in diameter near the head.  | 1  | | 
-| Microcontroller         | Raspberry Pi pico                | 1       | https://www.raspberrypi.com/products/raspberry-pi-pico/ |
+| Component               | Description | Quantity | Link |
+|-------------------------|-------------|----------|------|
+| Servos                  | G996R or similar for arm joints, and pen lifter | 3 | https://towerpro.com.tw/product/sg90-analog/ |
+| 3D printed parts        | 4 3D printed arms, servo holder, and case | 1 | |
+| Rotary encoders         | For manual control (etch-a-sketch mode!), we used EC11's | 2 | |
+| Pen                     | Any standard pen or marker, should be no more than 9mm in diameter near the head. | 1 | | 
+| Microcontroller         | Raspberry Pi pico | 1 | https://www.raspberrypi.com/products/raspberry-pi-pico/ |
 | Wiring                  | Dupont Jumper wires| ~ |  |
 | Sticky tape or glue | For securing the servos, double sided tape is pretty good | ~ | |
 | Breadboard | wiring aid | 1| |
