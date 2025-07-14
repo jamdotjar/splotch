@@ -1,3 +1,4 @@
+"""Basic servo library."""
 import machine
 import math
 

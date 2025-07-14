@@ -1,3 +1,4 @@
+"""Sanity check."""
 from servo import Servo
 import time
 
@@ -6,7 +7,7 @@ yservo = Servo(6)
 penservo = Servo(8)
 
 for i in range(5):
-    
+
     xservo.move(90)
     yservo.move(90)
     penservo.move(90)
